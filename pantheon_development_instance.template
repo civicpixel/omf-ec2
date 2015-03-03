@@ -153,7 +153,7 @@
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
           "configSets" : {
-            "drupal_install" : ["install_cfn", "install_wordpress", "setup_pantheon_access", "deploy_pantheon_site", "drupal_database" ]
+            "drupal_install" : ["install_cfn", "install_drupal", "setup_pantheon_access", "deploy_pantheon_site", "drupal_database" ]
           },
           "install_cfn" : {
             "files": {
@@ -191,7 +191,7 @@
             }
           },
 
-          "install_wordpress" : {
+          "install_drupal" : {
             "packages" : {
               "yum" : {
                 "php"          : [],
@@ -439,7 +439,7 @@
       },
       "CreationPolicy" : {
         "ResourceSignal" : {
-          "Timeout" : "PT15M"
+          "Timeout" : "PT120M"
         }
       }
     }
