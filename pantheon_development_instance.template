@@ -20,15 +20,35 @@
       "ConstraintDescription" : "must be a valid EC2 instance type."
     },
 
-    "PantheonInstanceID" : { 
-      "Description": "Pantheon Instance ID",
+    "PantheonSiteName" : { 
+      "Description": "Pantheon Site Name",
       "Type": "String",
-      "ConstraintDescription": "Must be a Pantheon Instance ID ex: 907ccfe0-4fbb-4463-b3a0-fbedf7bee74f"
+      "ConstraintDescription": "This is the short id used in the url, ex: omp in dev-omp.gotpantheon.com"
+    },
+
+    "PantheonEmail" : {
+      "Description": "Email address you use to login to your Pantheon account",
+      "Type": "String",
+      "ConstraintDescription": "Must be a valid email address with access to the site you are replicating"
+    },
+
+    "PantheonPassword" : {
+      "NoEcho": "true",
+      "Description": "Password you use to access your Pantheon account",
+      "Type": "String",
+      "ConstraintDescription": "The password associated with your Pantheon email login"
+    },
+
+    "PantheonRsaKey" : {
+      "NoEcho": "true",
+      "Description": "SSH Key that you use to access sites on your Pantheon account",
+      "Type": "String",
+      "ConstraintDescription": "Must be a valid private key beginning with -----BEGIN RSA PRIVATE KEY---- and ending with -----END RSA PRIVATE KEY-----"
     },
 
     "DBName" : {
-      "Default": "wordpressdb",
-      "Description" : "The WordPress database name",
+      "Default": "drupal",
+      "Description" : "The Drupal database name",
       "Type": "String",
       "MinLength": "1",
       "MaxLength": "64",
@@ -38,7 +58,7 @@
 
     "DBUser" : {
       "NoEcho": "true",
-      "Description" : "The WordPress database admin account username",
+      "Description" : "The Drupal database admin account username",
       "Type": "String",
       "MinLength": "1",
       "MaxLength": "16",
@@ -48,7 +68,7 @@
 
     "DBPassword" : {
       "NoEcho": "true",
-      "Description" : "The WordPress database admin account password",
+      "Description" : "The Drupal database admin account password",
       "Type": "String",
       "MinLength": "8",
       "MaxLength": "41",
@@ -133,7 +153,7 @@
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
           "configSets" : {
-            "wordpress_install" : ["install_cfn", "install_wordpress", "configure_wordpress" ]
+            "drupal_install" : ["install_cfn", "install_wordpress", "setup_pantheon_access", "deploy_pantheon_site", "drupal_database" ]
           },
           "install_cfn" : {
             "files": {
@@ -155,7 +175,7 @@
                   "action=/opt/aws/bin/cfn-init -v ",
                           "         --stack ", { "Ref" : "AWS::StackName" },
                           "         --resource WebServer ",
-                          "         --configsets wordpress_install ",
+                          "         --configsets drupal_install ",
                           "         --region ", { "Ref" : "AWS::Region" }, "\n"
                 ]]},          
                 "mode"  : "000400",
@@ -183,31 +203,17 @@
                 "httpd"        : []
               }
             },
-            "sources" : {
-              "/var/www/html" : "http://wordpress.org/latest.tar.gz"
-            },
             "files" : {
               "/tmp/setup.mysql" : {
                 "content" : { "Fn::Join" : ["", [
                   "CREATE DATABASE ", { "Ref" : "DBName" }, ";\n",
                   "CREATE USER '", { "Ref" : "DBUser" }, "'@'localhost' IDENTIFIED BY '", { "Ref" : "DBPassword" }, "';\n",
                   "GRANT ALL ON ", { "Ref" : "DBName" }, ".* TO '", { "Ref" : "DBUser" }, "'@'localhost';\n",
-                  "FLUSH PRIVILEGES;\n"
+                  "FLUSH PRIVILEGES;\n",
+                  "SET GLOBAL max_allowed_packet=64*1024*1024;\n",
+                  "SET GLOBAL wait_timeout=600;\n"
                 ]]},
                 "mode"  : "000400",
-                "owner" : "root",
-                "group" : "root"
-              },
-
-              "/tmp/create-wp-config" : {
-                "content" : { "Fn::Join" : [ "", [
-                  "#!/bin/bash -xe\n",
-                  "cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php\n",
-                  "sed -i \"s/'database_name_here'/'",{ "Ref" : "DBName" }, "'/g\" wp-config.php\n",
-                  "sed -i \"s/'username_here'/'",{ "Ref" : "DBUser" }, "'/g\" wp-config.php\n",
-                  "sed -i \"s/'password_here'/'",{ "Ref" : "DBPassword" }, "'/g\" wp-config.php\n"
-                ]]},
-                "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
               }
@@ -220,7 +226,173 @@
             }
           },
 
-          "configure_wordpress" : {
+          "setup_pantheon_access" : {
+            "packages" : {
+              "yum" : {
+                "git"          : [],
+                "php-pear"     : []
+              }
+            },
+            "files" : {
+              "/home/ec2-user/.ssh/id_rsa" : {
+                "content" : { "Ref" : "PantheonRsaKey" },
+                "mode" : "000600",
+                "owner" : "ec2-user",
+                "group" : "ec2-user"
+              },
+
+              "/tmp/sanitize-key" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "sed -i 's/-----BEGIN RSA PRIVATE KEY----- //g' id_rsa\n",
+                  "sed -i 's/ -----END RSA PRIVATE KEY-----//g' id_rsa\n",
+                  "tr ' ' '\n' < id_rsa > temp_rsa\n",
+                  "mv temp_rsa id_rsa\n",
+                  "sed -i '1i-----BEGIN RSA PRIVATE KEY-----' id_rsa\n",
+                  "echo '\n-----END RSA PRIVATE KEY-----' >> id_rsa\n",
+                  "chmod 600 id_rsa\n",
+                  "chown ec2-user:ec2-user id_rsa\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/tmp/install-drush" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "pear channel-discover pear.drush.org\n",
+                  "pear install drush/drush\n",
+                  "mkdir /home/ec2-user/.drush\n",
+                  "chown ec2-user:ec2-user /home/ec2-user/.drush\n",
+                  "drush\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/tmp/install-terminus" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "curl https://github.com/pantheon-systems/cli/releases/download/0.5.2/terminus.phar -L -o /usr/local/bin/terminus\n",
+                  "chmod +x /usr/local/bin/terminus\n",
+                  "echo Defaults:root \\!requiretty >> /etc/sudoers\n",
+                  "sudo -u ec2-user mkdir /home/ec2-user/.terminus\n",
+                  "sudo -u ec2-user mkdir /home/ec2-user/.terminus/cache\n",
+                  "sudo -u ec2-user /usr/local/bin/terminus auth login ",{ "Ref" : "PantheonEmail" }," --password=",{ "Ref" : "PantheonPassword"},"\n",
+                  "sudo -u ec2-user /usr/local/bin/terminus sites aliases --location=/home/ec2-user/.drush/pantheon.aliases.drushrc.php\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
+            "commands" : {
+              "01_sanitize_key" : {
+                "command" : "/tmp/sanitize-key",
+                "cwd" : "/home/ec2-user/.ssh"
+              },
+              "02_install_drush" : {
+                "command" : "/tmp/install-drush"
+              },
+              "03_install_terminus" : {
+                "command" : "/tmp/install-terminus"
+              }
+            }
+          },
+
+          "deploy_pantheon_site" : {
+            "files" : {
+              "/tmp/clone-development-site" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "PANTHEONUSER=\"$(php -r 'require_once(\"/home/ec2-user/.drush/pantheon.aliases.drushrc.php\"); print $aliases[\"",{ "Ref" : "PantheonSiteName" },".dev\"][\"remote-user\"];')\"\n",
+                  "ssh-keyscan -p 2222 codeserver.$PANTHEONUSER.drush.in >> /home/ec2-user/.ssh/known_hosts\n",
+                  "ssh-keyscan -p 2222 appserver.$PANTHEONUSER.drush.in >> /home/ec2-user/.ssh/known_hosts\n",
+                  "git clone ssh://codeserver.$PANTHEONUSER@codeserver.$PANTHEONUSER.drush.in:2222/~/repository.git /var/www/html\n",
+                  "cd /var/www/html\n",
+                  "drush -r . -y rsync @pantheon.",{ "Ref" : "PantheonSiteName" },".dev:%files @self:sites/default/\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/tmp/database-settings" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "cd /var/www/html\n",
+                  "drush eval '\n",
+                  "include DRUPAL_ROOT.\"/includes/install.inc\";\n",
+                  "include DRUPAL_ROOT.\"/includes/update.inc\";\n",
+                  "global $db_prefix;\n",
+                  "$db[\"databases\"][\"value\"] = update_parse_db_url(\"mysql://",{ "Ref" : "DBUser" },":",{ "Ref" : "DBPassword" },"@localhost/",{ "Ref" : "DBName" },"\", $db_prefix);\n",
+                  "drupal_rewrite_settings($db, $db_prefix);'"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/tmp/ec2user-site-deploy" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "chmod +x /tmp/clone-development-site\n",
+                  "chown ec2-user:root /tmp/clone-development-site\n",
+                  "chown ec2-user:root /var/www/html\n",
+                  "chown ec2-user:root /tmp/database-settings\n",
+                  "sudo -u ec2-user /tmp/clone-development-site\n",
+                  "cd /var/www/html/sites/default\n",
+                  "chown ec2-user:apache files\n",
+                  "cd files\n",
+                  "chown -R ec2-user:apache *\n",
+                  "sed -i 's/AllowOverride None/AllowOverride All/g' /etc/httpd/conf/httpd.conf\n",
+                  "yum --enablerepo=epel -y install phpmyadmin\n",
+                  "ln -s /usr/share/phpmyadmin /var/www/html/phpmyadmin\n",
+                  "sed -i 's/127.0.0.1/129.19.150.253/g' /etc/httpd/conf.d/phpMyAdmin.conf\n",
+                  "/etc/init.d/httpd restart\n",
+                  "chown ec2-user:apache /var/www/html/sites/default/files/.htaccess\n",
+                  "sudo -u ec2-user /tmp/database-settings\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
+            "commands" : {
+              "01_ec2user_site_deploy" : {
+                "command" : "/tmp/ec2user-site-deploy"
+              }
+            }
+          },
+
+          "drupal_database" : {
+            "files" : {
+              "/tmp/database-import" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "drush @pantheon.cf.dev sql-dump > /tmp/drupal-database.sql\n",
+                  "sed -i '1d' /tmp/drupal-database.sql\n",
+                  "cd /var/www/html\n",
+                  "drush sql-cli < /tmp/drupal-database.sql\n"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+
+              "/tmp/ec2user-database-import" : {
+                "content" : { "Fn::Join" : [ "", [
+                  "#!/bin/bash -xe\n",
+                  "chmod +x /tmp/database-import\n",
+                  "chown ec2-user:root /tmp/database-import\n",
+                  "sudo -u ec2-user /tmp/database-import\n",
+                  "cd /var/www/html\n",
+                  "drush cc all"
+                ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              }
+            },
+
             "commands" : {
               "01_set_mysql_root_password" : {
                 "command" : { "Fn::Join" : ["", ["mysqladmin -u root password '", { "Ref" : "DBRootPassword" }, "'"]]},
@@ -230,9 +402,8 @@
                 "command" : { "Fn::Join" : ["", ["mysql -u root --password='", { "Ref" : "DBRootPassword" }, "' < /tmp/setup.mysql"]]},
                 "test" : { "Fn::Join" : ["", ["$(mysql ", { "Ref" : "DBName" }, " -u root --password='", { "Ref" : "DBRootPassword" }, "' >/dev/null 2>&1 </dev/null); (( $? != 0 ))"]]}
               },
-              "03_configure_wordpress" : {
-                "command" : "/tmp/create-wp-config",
-                "cwd" : "/var/www/html/wordpress"
+              "03_import_database" : {
+                "command" : "/tmp/ec2user-database-import"
               }
             }
           }
@@ -257,7 +428,7 @@
                        "/opt/aws/bin/cfn-init -v ",
                        "         --stack ", { "Ref" : "AWS::StackName" },
                        "         --resource WebServer ",
-                       "         --configsets wordpress_install ",
+                       "         --configsets drupal_install ",
                        "         --region ", { "Ref" : "AWS::Region" }, "\n",
 
                        "/opt/aws/bin/cfn-signal -e $? ",
@@ -276,8 +447,12 @@
 
   "Outputs" : {
     "WebsiteURL" : {
-      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "WebServer", "PublicDnsName" ]}, "/wordpress" ]]},
-      "Description" : "WordPress Website"
+      "Value" : { "Fn::Join" : ["", ["http://", { "Fn::GetAtt" : [ "WebServer", "PublicDnsName" ]}]]},
+      "Description" : "Drupal Pantheon Development Site"
+    },
+    "SSH" : {
+      "Value" : { "Fn::Join" : ["", ["ssh -i ",{ "Ref" : "KeyName" },".pem ec2-user@",{ "Fn::GetAtt" : [ "WebServer", "PublicDnsName" ]}]]},
+      "Description" : "SSH Quick Connect"
     }
   }
 }
