@@ -349,28 +349,9 @@
           "drupal_database" : {
             "files" : {
               "/tmp/database-import" : {
-                "content" : { "Fn::Join" : [ "", [
-                  "#!/bin/bash -xe\n",
-                  "drush @pantheon.cf.dev sql-dump > /tmp/drupal-database.sql\n",
-                  "sed -i '1d' /tmp/drupal-database.sql\n",
-                  "cd /var/www/html\n",
-                  "drush sql-cli < /tmp/drupal-database.sql\n"
-                ]]},
-                "mode" : "000500",
-                "owner" : "root",
-                "group" : "root"
-              },
-              "/tmp/ec2user-database-import" : {
-                "content" : { "Fn::Join" : [ "", [
-                  "#!/bin/bash -xe\n",
-                  "chmod +x /tmp/database-import\n",
-                  "chown ec2-user:root /tmp/database-import\n",
-                  "sudo -u ec2-user /tmp/database-import\n",
-                  "cd /var/www/html\n",
-                  "drush cc all"
-                ]]},
-                "mode" : "000500",
-                "owner" : "root",
+                "source" : "https://raw.githubusercontent.com/civicpixel/omf-ec2/master/scripts/import-pantheon-database.sh",
+                "mode" : "000550",
+                "owner" : "ec2-user",
                 "group" : "root"
               }
             },
@@ -384,7 +365,7 @@
                 "test" : { "Fn::Join" : ["", ["$(mysql ", { "Ref" : "DBName" }, " -u root --password='", { "Ref" : "DBRootPassword" }, "' >/dev/null 2>&1 </dev/null); (( $? != 0 ))"]]}
               },
               "03_import_database" : {
-                "command" : "/tmp/ec2user-database-import"
+                "command" : "sudo -u ec2-user /tmp/database-import"
               }
             }
           }
