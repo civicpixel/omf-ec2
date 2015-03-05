@@ -4,48 +4,40 @@
   "Description" : "Generates an ec2 instance based on a Pantheon development site",
 
   "Parameters" : {
-
     "KeyName": {
       "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
       "Type": "AWS::EC2::KeyPair::KeyName",
       "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
     },
-
     "InstanceType" : {
       "Description" : "WebServer EC2 instance type",
       "Type" : "String",
       "Default" : "t2.micro",
-      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium"]
-,
+      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium"],
       "ConstraintDescription" : "must be a valid EC2 instance type."
     },
-
     "PantheonSiteName" : { 
       "Description": "Pantheon Site Name",
       "Type": "String",
       "ConstraintDescription": "This is the short id used in the url, ex: omp in dev-omp.gotpantheon.com"
     },
-
     "PantheonEmail" : {
       "Description": "Email address you use to login to your Pantheon account",
       "Type": "String",
       "ConstraintDescription": "Must be a valid email address with access to the site you are replicating"
     },
-
     "PantheonPassword" : {
       "NoEcho": "true",
       "Description": "Password you use to access your Pantheon account",
       "Type": "String",
       "ConstraintDescription": "The password associated with your Pantheon email login"
     },
-
     "PantheonRsaKey" : {
       "NoEcho": "true",
       "Description": "SSH Key that you use to access sites on your Pantheon account",
       "Type": "String",
       "ConstraintDescription": "Must be a valid private key beginning with -----BEGIN RSA PRIVATE KEY---- and ending with -----END RSA PRIVATE KEY-----"
     },
-
     "DBName" : {
       "Default": "drupal",
       "Description" : "The Drupal database name",
@@ -55,7 +47,6 @@
       "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
       "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
     },
-
     "DBUser" : {
       "NoEcho": "true",
       "Description" : "The Drupal database admin account username",
@@ -65,7 +56,6 @@
       "AllowedPattern" : "[a-zA-Z][a-zA-Z0-9]*",
       "ConstraintDescription" : "must begin with a letter and contain only alphanumeric characters."
     },
-
     "DBPassword" : {
       "NoEcho": "true",
       "Description" : "The Drupal database admin account password",
@@ -75,7 +65,6 @@
       "AllowedPattern" : "[a-zA-Z0-9]*",
       "ConstraintDescription" : "must contain only alphanumeric characters."
     },
-
     "DBRootPassword" : {
       "NoEcho": "true",
       "Description" : "MySQL root password",
@@ -130,8 +119,8 @@
       "hs1.8xlarge" : { "Arch" : "HVM64"  },
       "cr1.8xlarge" : { "Arch" : "HVM64"  },
       "cc2.8xlarge" : { "Arch" : "HVM64"  }
-    }
-,
+    },
+    
     "AWSRegionArch2AMI" : {
       "us-east-1"        : {"PV64" : "ami-8e682ce6", "HVM64" : "ami-146e2a7c", "HVMG2" : "ami-7200461a"},
       "us-west-2"        : {"PV64" : "ami-9fc29baf", "HVM64" : "ami-dfc39aef", "HVMG2" : "ami-0b78203b"},
@@ -144,7 +133,6 @@
       "sa-east-1"        : {"PV64" : "ami-fd9925e0", "HVM64" : "ami-af9925b2", "HVMG2" : "NOT_SUPPORTED"},
       "cn-north-1"       : {"PV64" : "ami-8a1d8fb3", "HVM64" : "ami-981d8fa1", "HVMG2" : "NOT_SUPPORTED"}
     }
-
   },
 
   "Resources" : {
@@ -190,7 +178,6 @@
               }
             }
           },
-
           "install_drupal" : {
             "packages" : {
               "yum" : {
@@ -202,7 +189,7 @@
                 "mysql-libs"   : [],
                 "httpd"        : []
               }
-            },
+            },            
             "files" : {
               "/tmp/setup.mysql" : {
                 "content" : { "Fn::Join" : ["", [
@@ -217,7 +204,7 @@
                 "owner" : "root",
                 "group" : "root"
               }
-            },
+            },            
             "services" : {
               "sysvinit" : {
                 "httpd"  : { "enabled" : "true", "ensureRunning" : "true" },
@@ -225,14 +212,13 @@
               }
             }
           },
-
           "setup_pantheon_access" : {
             "packages" : {
               "yum" : {
                 "git"          : [],
                 "php-pear"     : []
               }
-            },
+            },            
             "files" : {
               "/home/ec2-user/.ssh/id_rsa" : {
                 "content" : { "Ref" : "PantheonRsaKey" },
@@ -240,7 +226,6 @@
                 "owner" : "ec2-user",
                 "group" : "ec2-user"
               },
-
               "/tmp/sanitize-key" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -256,7 +241,7 @@
                 "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
-              },
+              },              
               "/tmp/install-drush" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -269,7 +254,7 @@
                 "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
-              },
+              },              
               "/tmp/install-terminus" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -285,7 +270,7 @@
                 "owner" : "root",
                 "group" : "root"
               }
-            },
+            },            
             "commands" : {
               "01_sanitize_key" : {
                 "command" : "/tmp/sanitize-key",
@@ -299,7 +284,6 @@
               }
             }
           },
-
           "deploy_pantheon_site" : {
             "files" : {
               "/tmp/clone-development-site" : {
@@ -315,7 +299,7 @@
                 "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
-              },
+              },              
               "/tmp/database-settings" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -330,7 +314,7 @@
                 "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
-              },
+              },              
               "/tmp/ec2user-site-deploy" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -362,7 +346,6 @@
               }
             }
           },
-
           "drupal_database" : {
             "files" : {
               "/tmp/database-import" : {
@@ -377,7 +360,6 @@
                 "owner" : "root",
                 "group" : "root"
               },
-
               "/tmp/ec2user-database-import" : {
                 "content" : { "Fn::Join" : [ "", [
                   "#!/bin/bash -xe\n",
@@ -392,7 +374,6 @@
                 "group" : "root"
               }
             },
-
             "commands" : {
               "01_set_mysql_root_password" : {
                 "command" : { "Fn::Join" : ["", ["mysqladmin -u root password '", { "Ref" : "DBRootPassword" }, "'"]]},
