@@ -365,7 +365,7 @@
                 "test" : { "Fn::Join" : ["", ["$(mysql ", { "Ref" : "DBName" }, " -u root --password='", { "Ref" : "DBRootPassword" }, "' >/dev/null 2>&1 </dev/null); (( $? != 0 ))"]]}
               },
               "03_import_database" : {
-                "command" : "sudo -u ec2-user /tmp/database-import"
+                "command" : { "Fn::Join" : [" ", ["sudo -u ec2-user /tmp/database-import", { "Ref" : "PantheonSiteName" }, "root", { "Ref" : "DBRootPassword" }, { "Ref" : "DBName" }]]}
               }
             }
           }
