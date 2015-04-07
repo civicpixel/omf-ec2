@@ -395,7 +395,7 @@
                 "command" : "yum -y update"
               }
             }
-          },
+          }
         }
       },
       "Properties": {
