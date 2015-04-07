@@ -141,7 +141,7 @@
       "Metadata" : {
         "AWS::CloudFormation::Init" : {
           "configSets" : {
-            "drupal_install" : ["install_cfn", "install_drupal", "setup_pantheon_access", "deploy_pantheon_site", "drupal_database" ]
+            "drupal_install" : ["install_cfn", "improve_qol", "install_drupal", "setup_pantheon_access", "deploy_pantheon_site", "drupal_database", "cleanup" ]
           },
           "install_cfn" : {
             "files": {
@@ -175,6 +175,22 @@
               "sysvinit" : {
                 "cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
                               "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"] }
+              }
+            }
+          },
+          "improve_qol" : {
+            "files" : {
+              "/home/ec2-user/.vim/colors/solarized.vim" : {
+                "source" : "https://raw.githubusercontent.com/altercation/vim-colors-solarized/master/colors/solarized.vim",
+                "mode" : "000550",
+                "owner" : "ec2-user",
+                "group" : "ec2-user"
+              },
+              "/home/ec2-user/.vimrc" : {
+                "source" : "https://raw.githubusercontent.com/civicpixel/omf-ec2/master/scripts/vimrc",
+                "mode" : "000550",
+                "owner" : "ec2-user",
+                "group" : "ec2-user"
               }
             }
           },
@@ -327,14 +343,15 @@
                   "chown ec2-user:apache files\n",
                   "cd files\n",
                   "chown -R ec2-user:apache *\n",
-                  "sed -i 's/AllowOverride None/AllowOverride All/g' /etc/httpd/conf/httpd.conf\n",
-                  "yum --enablerepo=epel -y install phpmyadmin\n",
-                  "ln -s /usr/share/phpmyadmin /var/www/html/phpmyadmin\n",
-                  "sed -i 's/127.0.0.1/129.19.150.253/g' /etc/httpd/conf.d/phpMyAdmin.conf\n",
-                  "/etc/init.d/httpd restart\n",
                   "chown ec2-user:apache /var/www/html/sites/default/files/.htaccess\n",
                   "sudo -u ec2-user /tmp/database-settings\n"
                 ]]},
+                "mode" : "000500",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/tmp/httpd-config" : {
+                "source" : "https://raw.githubusercontent.com/civicpixel/omf-ec2/master/scripts/httpd-config.sh",
                 "mode" : "000500",
                 "owner" : "root",
                 "group" : "root"
@@ -343,6 +360,9 @@
             "commands" : {
               "01_ec2user_site_deploy" : {
                 "command" : "/tmp/ec2user-site-deploy"
+              },
+              "02_httpd_config" : {
+                "command" : "/tmp/httpd-config"
               }
             }
           },
@@ -368,7 +388,14 @@
                 "command" : { "Fn::Join" : [" ", ["sudo -u ec2-user /tmp/database-import", { "Ref" : "PantheonSiteName" }, "root", { "Ref" : "DBRootPassword" }, { "Ref" : "DBName" }]]}
               }
             }
-          }
+          },
+          "cleanup" : {
+            "commands" : {
+              "01_update_packages" : {
+                "command" : "yum -y update"
+              }
+            }
+          },
         }
       },
       "Properties": {
